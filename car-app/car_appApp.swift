@@ -39,9 +39,14 @@ struct car_appApp: App {
                 // Restore existing session from Keychain on launch,
                 // then keep listening for auth state changes (sign-out,
                 // token revocation, etc.) to update the UI reactively.
-                for await (event, _) in supabase.auth.authStateChanges {
+                for await (event, session) in supabase.auth.authStateChanges {
                     switch event {
-                    case .initialSession, .signedIn, .tokenRefreshed, .userUpdated:
+                    case .initialSession:
+                        // With emitLocalSessionAsInitialSession: true, the stored session
+                        // is emitted immediately. Only log in if it hasn't expired.
+                        let valid = session.map { !$0.isExpired } ?? false
+                        await MainActor.run { isLoggedIn = valid }
+                    case .signedIn, .tokenRefreshed, .userUpdated:
                         await MainActor.run { isLoggedIn = true }
                     case .signedOut, .passwordRecovery, .userDeleted:
                         await MainActor.run { isLoggedIn = false }
