@@ -11,7 +11,10 @@ import Supabase
 
 @main
 struct car_appApp: App {
+    @Environment(\.scenePhase) private var scenePhase
+
     @State private var isLoggedIn = false
+    @State private var hasResolvedInitialSession = false
     @AppStorage("local_onboarding_complete") private var hasCompletedOnboarding = false
     @AppStorage("pending_profile_payload_json") private var pendingProfilePayloadJSON = ""
 
@@ -31,7 +34,9 @@ struct car_appApp: App {
     var body: some Scene {
         WindowGroup {
             Group {
-                if isLoggedIn {
+                if !hasResolvedInitialSession {
+                    SplashView()
+                } else if isLoggedIn {
                     if hasCompletedOnboarding {
                         ContentView()
                     } else {
@@ -52,14 +57,14 @@ struct car_appApp: App {
                 for await (event, session) in supabase.auth.authStateChanges {
                     switch event {
                     case .initialSession:
-                        // With emitLocalSessionAsInitialSession: true, the stored session
-                        // is emitted immediately. Only log in if it hasn't expired.
-                        let valid = session.map { !$0.isExpired } ?? false
-                        await MainActor.run { isLoggedIn = valid }
+                        await validateSession(session)
                     case .signedIn, .tokenRefreshed, .userUpdated:
-                        await MainActor.run { isLoggedIn = true }
+                        await validateSession(session)
                     case .signedOut, .passwordRecovery, .userDeleted:
-                        await MainActor.run { isLoggedIn = false }
+                        await MainActor.run {
+                            isLoggedIn = false
+                            hasResolvedInitialSession = true
+                        }
                     default:
                         break
                     }
@@ -67,10 +72,50 @@ struct car_appApp: App {
             }
             .onOpenURL { url in
                 Task {
-                    try? await supabase.auth.session(from: url)
+                    do {
+                        _ = try await supabase.auth.session(from: url)
+                        await validateCurrentSession()
+                    } catch {
+                        await invalidateSession()
+                    }
+                }
+            }
+            .onChange(of: scenePhase) { _, newPhase in
+                guard newPhase == .active else { return }
+                Task {
+                    await validateCurrentSession()
                 }
             }
         }
         .modelContainer(sharedModelContainer)
+    }
+
+    @MainActor
+    private func invalidateSession() async {
+        try? await supabase.auth.signOut()
+        isLoggedIn = false
+        hasResolvedInitialSession = true
+    }
+
+    private func validateCurrentSession() async {
+        let currentSession = try? await supabase.auth.session
+        await validateSession(currentSession)
+    }
+
+    private func validateSession(_ session: Session?) async {
+        guard let session, !session.isExpired else {
+            await invalidateSession()
+            return
+        }
+
+        do {
+            _ = try await supabase.auth.user()
+            await MainActor.run {
+                isLoggedIn = true
+                hasResolvedInitialSession = true
+            }
+        } catch {
+            await invalidateSession()
+        }
     }
 }

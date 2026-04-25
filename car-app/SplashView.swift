@@ -3,17 +3,36 @@ import SwiftUI
 struct SplashView: View {
     var body: some View {
         ZStack {
-            Color(.systemBackground)
+            AppTheme.appBackground
                 .ignoresSafeArea()
-            Image("AppLogo")
-                .resizable()
-                .scaledToFit()
-                .frame(width: 160, height: 160)
-                .accessibilityLabel("App logo")
+
+            Circle()
+                .fill(AppTheme.brandAccentGlow)
+                .frame(width: 260, height: 260)
+                .blur(radius: 36)
+                .offset(y: -36)
+
+            VStack(spacing: 24) {
+                Image("driveout-logo")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(maxWidth: 260)
+                    .accessibilityLabel("Driveout logo")
+
+                ProgressView()
+                    .tint(AppTheme.brandAccent)
+                    .scaleEffect(1.1)
+            }
+            .padding(32)
         }
     }
 }
 
-#Preview {
+#Preview("Light") {
     SplashView()
+}
+
+#Preview("Dark") {
+    SplashView()
+        .preferredColorScheme(.dark)
 }

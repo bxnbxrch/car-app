@@ -10,8 +10,6 @@ import AuthenticationServices
 import Supabase
 
 struct LoginView: View {
-    @Environment(\.colorScheme) private var colorScheme
-
     @Binding var isLoggedIn: Bool
 
     private enum Mode { case signIn, signUp, awaitingVerification }
@@ -44,13 +42,13 @@ struct LoginView: View {
                             Text(mode == .signIn ? "Welcome back" : "Create an account")
                                 .font(.title2)
                                 .fontWeight(.bold)
-                                .foregroundStyle(primaryTextColor)
+                                .foregroundStyle(AppTheme.textPrimary)
 
                             Text(mode == .signIn
                                  ? "Sign in to find drives, locations, fuel prices, and your car data."
                                  : "Enter your details below to get started with Driveout.")
                                 .font(.subheadline)
-                                .foregroundStyle(secondaryTextColor)
+                                .foregroundStyle(AppTheme.textSecondary)
 
                             VStack(spacing: 14) {
                                 inputField(
@@ -92,9 +90,9 @@ struct LoginView: View {
                                 }
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 16)
-                                .background(primaryActionEnabled ? brandBlue : disabledButtonColor)
+                                .background(primaryActionEnabled ? AppTheme.brandAccent : AppTheme.buttonDisabled)
                                 .foregroundStyle(.white)
-                                .clipShape(RoundedRectangle(cornerRadius: 16))
+                                .clipShape(RoundedRectangle(cornerRadius: AppTheme.buttonCornerRadius))
                             }
                             .disabled(!primaryActionEnabled || isLoading)
 
@@ -113,13 +111,13 @@ struct LoginView: View {
                                 }
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 16)
-                                .background(googleButtonBackground)
-                                .foregroundStyle(primaryTextColor)
+                                .background(AppTheme.googleButtonBackground)
+                                .foregroundStyle(AppTheme.textPrimary)
                                 .overlay(
-                                    RoundedRectangle(cornerRadius: 16)
-                                        .stroke(cardBorderColor, lineWidth: 1)
+                                    RoundedRectangle(cornerRadius: AppTheme.buttonCornerRadius)
+                                        .stroke(AppTheme.borderSubtle, lineWidth: 1)
                                 )
-                                .clipShape(RoundedRectangle(cornerRadius: 16))
+                                .clipShape(RoundedRectangle(cornerRadius: AppTheme.buttonCornerRadius))
                             }
                             .disabled(isLoading)
 
@@ -136,19 +134,19 @@ struct LoginView: View {
                                 Button(action: toggleMode) {
                                     Text(mode == .signIn ? "Don't have an account? Sign up" : "Already have an account? Sign in")
                                         .font(.footnote)
-                                        .foregroundStyle(brandBlue)
+                                        .foregroundStyle(AppTheme.brandAccent)
                                 }
                                 Spacer()
                             }
                         }
                     }
                     .padding(24)
-                    .background(cardBackground)
+                    .background(AppTheme.surfaceCard)
                     .overlay(
-                        RoundedRectangle(cornerRadius: 28)
-                            .stroke(cardBorderColor, lineWidth: 1)
+                        RoundedRectangle(cornerRadius: AppTheme.cardCornerRadius)
+                            .stroke(AppTheme.borderSubtle, lineWidth: 1)
                     )
-                    .clipShape(RoundedRectangle(cornerRadius: 28))
+                    .clipShape(RoundedRectangle(cornerRadius: AppTheme.cardCornerRadius))
 
                     Spacer()
                 }
@@ -282,16 +280,16 @@ struct LoginView: View {
         VStack(spacing: 20) {
             Image(systemName: "envelope.badge.shield.half.filled")
                 .font(.system(size: 48))
-                .foregroundStyle(brandBlue)
+                .foregroundStyle(AppTheme.brandAccent)
 
             Text("Check your inbox")
                 .font(.title2)
                 .fontWeight(.bold)
-                .foregroundStyle(primaryTextColor)
+                .foregroundStyle(AppTheme.textPrimary)
 
             Text("We've sent a verification link to\n**\(email)**. Click it to activate your account, then sign in.")
                 .font(.subheadline)
-                .foregroundStyle(secondaryTextColor)
+                .foregroundStyle(AppTheme.textSecondary)
                 .multilineTextAlignment(.center)
 
             Button(action: {
@@ -304,9 +302,9 @@ struct LoginView: View {
                     .fontWeight(.semibold)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 16)
-                    .background(brandBlue)
+                    .background(AppTheme.brandAccent)
                     .foregroundStyle(.white)
-                    .clipShape(RoundedRectangle(cornerRadius: 16))
+                    .clipShape(RoundedRectangle(cornerRadius: AppTheme.buttonCornerRadius))
             }
         }
         .frame(maxWidth: .infinity)
@@ -315,35 +313,31 @@ struct LoginView: View {
     private var googleDivider: some View {
         HStack(spacing: 12) {
             Rectangle()
-                .fill(cardBorderColor)
+                .fill(AppTheme.borderSubtle)
                 .frame(height: 1)
 
             Text("or")
                 .font(.footnote)
-                .foregroundStyle(secondaryTextColor)
+                .foregroundStyle(AppTheme.textSecondary)
 
             Rectangle()
-                .fill(cardBorderColor)
+                .fill(AppTheme.borderSubtle)
                 .frame(height: 1)
         }
     }
 
     private var backgroundView: some View {
         ZStack {
-            LinearGradient(
-                colors: backgroundGradientColors,
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
+            AppTheme.appBackground
 
             Circle()
-                .fill(brandBlue.opacity(colorScheme == .dark ? 0.22 : 0.12))
+                .fill(AppTheme.brandAccentGlow)
                 .frame(width: 320)
                 .blur(radius: 40)
                 .offset(x: -120, y: -220)
 
             Circle()
-                .fill(Color.white.opacity(colorScheme == .dark ? 0.08 : 0.3))
+                .fill(AppTheme.glassHighlight)
                 .frame(width: 280)
                 .blur(radius: 60)
                 .offset(x: 140, y: -260)
@@ -356,103 +350,53 @@ struct LoginView: View {
                 .resizable()
                 .scaledToFit()
                 .frame(maxWidth: 320)
-                .shadow(color: Color.black.opacity(colorScheme == .dark ? 0.3 : 0.08), radius: 18, y: 8)
+                .shadow(color: Color.black.opacity(0.18), radius: 18, y: 8)
 
             Text("Sign in to your Driveout account")
                 .font(.subheadline.weight(.medium))
-                .foregroundStyle(secondaryTextColor)
+                .foregroundStyle(AppTheme.textSecondary)
         }
     }
 
     private func inputField(title: String, text: Binding<String>, systemImage: String) -> some View {
         HStack(spacing: 12) {
             Image(systemName: systemImage)
-                .foregroundStyle(brandBlue)
+                .foregroundStyle(AppTheme.brandAccent)
                 .frame(width: 20)
 
             TextField(title, text: text)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
                 .keyboardType(.emailAddress)
-                .foregroundStyle(primaryTextColor)
+                .foregroundStyle(AppTheme.textPrimary)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 16)
-        .background(fieldBackground)
+        .background(AppTheme.surfaceField)
         .overlay(
-            RoundedRectangle(cornerRadius: 16)
-                .stroke(fieldBorderColor, lineWidth: 1)
+            RoundedRectangle(cornerRadius: AppTheme.fieldCornerRadius)
+                .stroke(AppTheme.borderAccent, lineWidth: 1)
         )
-        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .clipShape(RoundedRectangle(cornerRadius: AppTheme.fieldCornerRadius))
     }
 
     private func secureInputField(title: String, text: Binding<String>, systemImage: String) -> some View {
         HStack(spacing: 12) {
             Image(systemName: systemImage)
-                .foregroundStyle(brandBlue)
+                .foregroundStyle(AppTheme.brandAccent)
                 .frame(width: 20)
 
             SecureField(title, text: text)
-                .foregroundStyle(primaryTextColor)
+                .foregroundStyle(AppTheme.textPrimary)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 16)
-        .background(fieldBackground)
+        .background(AppTheme.surfaceField)
         .overlay(
-            RoundedRectangle(cornerRadius: 16)
-                .stroke(fieldBorderColor, lineWidth: 1)
+            RoundedRectangle(cornerRadius: AppTheme.fieldCornerRadius)
+                .stroke(AppTheme.borderAccent, lineWidth: 1)
         )
-        .clipShape(RoundedRectangle(cornerRadius: 16))
-    }
-
-    private var backgroundGradientColors: [Color] {
-        colorScheme == .dark
-            ? [Color(red: 0.02, green: 0.03, blue: 0.06), Color(red: 0.06, green: 0.08, blue: 0.12), .black]
-            : [Color(red: 0.95, green: 0.97, blue: 1.0), .white, Color(red: 0.9, green: 0.94, blue: 0.99)]
-    }
-
-    private var cardBackground: AnyShapeStyle {
-        colorScheme == .dark
-            ? AnyShapeStyle(Color.white.opacity(0.06))
-            : AnyShapeStyle(Color.white.opacity(0.88))
-    }
-
-    private var fieldBackground: AnyShapeStyle {
-        colorScheme == .dark
-            ? AnyShapeStyle(Color.white.opacity(0.08))
-            : AnyShapeStyle(Color.white.opacity(0.95))
-    }
-
-    private var primaryTextColor: Color {
-        colorScheme == .dark ? .white : Color(red: 0.08, green: 0.1, blue: 0.14)
-    }
-
-    private var secondaryTextColor: Color {
-        colorScheme == .dark ? Color.white.opacity(0.7) : Color.black.opacity(0.6)
-    }
-
-    private var cardBorderColor: Color {
-        colorScheme == .dark ? Color.white.opacity(0.12) : Color.black.opacity(0.08)
-    }
-
-    private var fieldBorderColor: Color {
-        colorScheme == .dark ? brandBlue.opacity(0.24) : brandBlue.opacity(0.18)
-    }
-
-    private var disabledButtonColor: Color {
-        colorScheme == .dark ? Color.white.opacity(0.18) : Color.black.opacity(0.18)
-    }
-
-    private var googleButtonBackground: Color {
-        colorScheme == .dark ? Color.white.opacity(0.08) : Color.white
-    }
-
-    private var brandBlue: Color {
-        Color(red: 0.05, green: 0.5, blue: 1.0)
-    }
-
-    private var brandBlueBright: Color {
-        Color(red: 0.11, green: 0.78, blue: 1.0)
+        .clipShape(RoundedRectangle(cornerRadius: AppTheme.fieldCornerRadius))
     }
 
     private var logoImageName: String {

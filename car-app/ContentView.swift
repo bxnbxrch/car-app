@@ -152,10 +152,10 @@ struct PostLoginOnboardingView: View {
 
             Text("Step \(step.rawValue + 1) of \(Step.allCases.count)")
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(AppTheme.textSecondary)
 
             ProgressView(value: Double(step.rawValue + 1), total: Double(Step.allCases.count))
-                .tint(Color(red: 0.05, green: 0.5, blue: 1.0))
+                .tint(AppTheme.brandAccent)
         }
     }
 
@@ -167,13 +167,13 @@ struct PostLoginOnboardingView: View {
 
             Text("This should be unique. You can use lowercase letters, numbers, and underscores.")
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(AppTheme.textSecondary)
 
             TextField("e.g. ben_drives", text: $username)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
                 .padding()
-                .background(Color(.secondarySystemBackground))
+                .background(AppTheme.surfaceSecondary)
                 .clipShape(RoundedRectangle(cornerRadius: 12))
 
             if !username.isEmpty && !isValidUsername {
@@ -192,11 +192,11 @@ struct PostLoginOnboardingView: View {
 
             Text("This is your informal name shown around the app.")
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(AppTheme.textSecondary)
 
             TextField("e.g. Ben", text: $informalName)
                 .padding()
-                .background(Color(.secondarySystemBackground))
+                .background(AppTheme.surfaceSecondary)
                 .clipShape(RoundedRectangle(cornerRadius: 12))
         }
     }
@@ -209,7 +209,7 @@ struct PostLoginOnboardingView: View {
 
             Text("Choose the photo you'd like to use for your profile.")
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(AppTheme.textSecondary)
 
             HStack(spacing: 16) {
                 Group {
@@ -226,7 +226,7 @@ struct PostLoginOnboardingView: View {
                     }
                 }
                 .frame(width: 96, height: 96)
-                .background(Color(.secondarySystemBackground))
+                .background(AppTheme.surfaceSecondary)
                 .clipShape(Circle())
 
                 PhotosPicker(selection: $selectedPhoto, matching: .images) {
@@ -234,7 +234,7 @@ struct PostLoginOnboardingView: View {
                         .fontWeight(.semibold)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 12)
-                        .background(Color(red: 0.05, green: 0.5, blue: 1.0))
+                        .background(AppTheme.brandAccent)
                         .foregroundStyle(.white)
                         .clipShape(RoundedRectangle(cornerRadius: 12))
                 }
@@ -257,11 +257,11 @@ struct PostLoginOnboardingView: View {
 
             Text("Add your car type now, or skip and do it later.")
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(AppTheme.textSecondary)
 
             TextField("e.g. Tesla Model 3", text: $carType)
                 .padding()
-                .background(Color(.secondarySystemBackground))
+                .background(AppTheme.surfaceSecondary)
                 .clipShape(RoundedRectangle(cornerRadius: 12))
         }
     }
@@ -273,7 +273,7 @@ struct PostLoginOnboardingView: View {
                     .fontWeight(.semibold)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 14)
-                    .background(canContinue ? Color(red: 0.05, green: 0.5, blue: 1.0) : Color.gray.opacity(0.4))
+                    .background(canContinue ? AppTheme.brandAccent : AppTheme.buttonDisabled)
                     .foregroundStyle(.white)
                     .clipShape(RoundedRectangle(cornerRadius: 12))
             }
