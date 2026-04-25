@@ -10,6 +10,8 @@ import SwiftData
 
 @main
 struct car_appApp: App {
+    @State private var isLoggedIn = false
+
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
             Item.self,
@@ -25,7 +27,11 @@ struct car_appApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            if isLoggedIn {
+                ContentView()
+            } else {
+                LoginView(isLoggedIn: $isLoggedIn)
+            }
         }
         .modelContainer(sharedModelContainer)
     }
