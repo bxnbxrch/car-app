@@ -28,10 +28,20 @@ struct car_appApp: App {
 
     var body: some Scene {
         WindowGroup {
-            if isLoggedIn {
-                ContentView()
-            } else {
-                LoginView(isLoggedIn: $isLoggedIn)
+            Group {
+                if isLoggedIn {
+                    ContentView()
+                } else {
+                    LoginView(isLoggedIn: $isLoggedIn)
+                }
+            }
+            .onOpenURL { url in
+                Task {
+                    try? await supabase.auth.session(from: url)
+                    if let _ = try? await supabase.auth.session {
+                        await MainActor.run { isLoggedIn = true }
+                    }
+                }
             }
         }
         .modelContainer(sharedModelContainer)

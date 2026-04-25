@@ -175,7 +175,7 @@ struct LoginView: View {
                 try await supabase.auth.signUp(
                     email: email.trimmingCharacters(in: .whitespacesAndNewlines),
                     password: password,
-                    redirectTo: URL(string: "carapp://auth-callback")
+                    redirectTo: URL(string: "driveout://auth-callback")
                 )
                 await MainActor.run {
                     isLoading = false
