@@ -183,7 +183,6 @@ struct LoginView: View {
                     email: email.trimmingCharacters(in: .whitespacesAndNewlines),
                     password: password
                 )
-                await MainActor.run { isLoggedIn = true }
             } catch {
                 await MainActor.run {
                     errorMessage = error.localizedDescription
@@ -261,8 +260,6 @@ struct LoginView: View {
 
                 do {
                     try await supabase.auth.session(from: callbackURL)
-                    isLoggedIn = true
-                    isLoading = false
                 } catch {
                     errorMessage = error.localizedDescription
                     isLoading = false

@@ -14,8 +14,8 @@ struct car_appApp: App {
     @Environment(\.scenePhase) private var scenePhase
 
     @State private var isLoggedIn = false
+    @State private var hasCompletedProfile = false
     @State private var hasResolvedInitialSession = false
-    @AppStorage("local_onboarding_complete") private var hasCompletedOnboarding = false
     @AppStorage("pending_profile_payload_json") private var pendingProfilePayloadJSON = ""
 
     var sharedModelContainer: ModelContainer = {
@@ -37,13 +37,16 @@ struct car_appApp: App {
                 if !hasResolvedInitialSession {
                     SplashView()
                 } else if isLoggedIn {
-                    if hasCompletedOnboarding {
+                    if hasCompletedProfile {
                         ContentView()
                     } else {
                         PostLoginOnboardingView { payload in
-                            // Prepared and stored locally for future backend submission.
                             pendingProfilePayloadJSON = payload.jsonString ?? ""
-                            hasCompletedOnboarding = true
+                            try await createUserProfile(from: payload)
+                            pendingProfilePayloadJSON = ""
+                            await MainActor.run {
+                                hasCompletedProfile = true
+                            }
                         }
                     }
                 } else {
@@ -94,6 +97,7 @@ struct car_appApp: App {
     private func invalidateSession() async {
         try? await supabase.auth.signOut()
         isLoggedIn = false
+        hasCompletedProfile = false
         hasResolvedInitialSession = true
     }
 
@@ -109,9 +113,11 @@ struct car_appApp: App {
         }
 
         do {
-            _ = try await supabase.auth.user()
+            let user = try await supabase.auth.user()
+            let profile = try await fetchUserProfile(for: user.id)
             await MainActor.run {
                 isLoggedIn = true
+                hasCompletedProfile = profile?.isComplete ?? false
                 hasResolvedInitialSession = true
             }
         } catch {
