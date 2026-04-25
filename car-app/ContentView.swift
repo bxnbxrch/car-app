@@ -16,22 +16,51 @@ struct ContentView: View {
     @State private var showProfileHub = false
 
     var body: some View {
-        NavigationStack {
-            ZStack {
-                AppTheme.appBackground
-                    .ignoresSafeArea()
+        TabView {
+            NavigationStack {
+                ZStack {
+                    AppTheme.appBackground
+                        .ignoresSafeArea()
 
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 20) {
-                        homeHeader
-                        convoyStatusCard
-                        featureGrid
-                        nextStepsCard
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 20) {
+                            homeHeader
+                            convoyStatusCard
+                            featureGrid
+                            nextStepsCard
+                        }
+                        .padding(20)
                     }
-                    .padding(20)
                 }
+                .navigationBarHidden(true)
             }
-            .navigationBarHidden(true)
+            .tabItem {
+                Label("Home", systemImage: "house.fill")
+            }
+
+            FeaturePlaceholderView(
+                title: "Friends",
+                subtitle: "Friends lists, network management, and richer social flows will live here. The profile photo menu handles profile tools and friend request actions."
+            )
+            .tabItem {
+                Label("Friends", systemImage: "person.2.fill")
+            }
+
+            FeaturePlaceholderView(
+                title: "Convoys",
+                subtitle: "This tab is reserved for convoy creation, joining, live sessions, and map-based trip coordination."
+            )
+            .tabItem {
+                Label("Convoys", systemImage: "car.2.fill")
+            }
+
+            FeaturePlaceholderView(
+                title: "Fuel",
+                subtitle: "Nearby fuel stations, pricing, and filtering will be added here in a later phase."
+            )
+            .tabItem {
+                Label("Fuel", systemImage: "fuelpump.fill")
+            }
         }
         .task {
             await refreshHomeProfile()
@@ -220,26 +249,85 @@ struct ProfileHubView: View {
 
     var body: some View {
         NavigationStack {
-            ZStack {
-                AppTheme.appBackground
-                    .ignoresSafeArea()
+            List {
+                if let dashboardError {
+                    Section {
+                        statusBanner(text: dashboardError, color: .red, isError: true)
+                            .listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 8, trailing: 0))
+                            .listRowBackground(Color.clear)
+                    }
+                }
 
-                if isLoadingDashboard {
-                    ProgressView()
-                        .tint(AppTheme.brandAccent)
-                        .scaleEffect(1.2)
-                } else {
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 20) {
-                            headerCard
-                            friendRequestsCard
+                if let friendStatusMessage {
+                    Section {
+                        statusBanner(text: friendStatusMessage, color: AppTheme.brandAccent)
+                            .listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 8, trailing: 0))
+                            .listRowBackground(Color.clear)
+                    }
+                }
+
+                Section("Profile") {
+                    NavigationLink {
+                        submenuPage(title: "Edit Profile") {
                             profileCard
+                        }
+                    } label: {
+                        profileMenuRow(
+                            title: "Edit profile",
+                            subtitle: profileSummaryText,
+                            systemImage: "person.crop.circle.fill"
+                        )
+                    }
+
+                    NavigationLink {
+                        submenuPage(title: "Friend Requests") {
+                            friendRequestsCard
+                        }
+                    } label: {
+                        profileMenuRow(
+                            title: "Friend requests",
+                            subtitle: pendingFriendRequests.isEmpty
+                                ? "No pending requests"
+                                : "\(pendingFriendRequests.count) waiting",
+                            systemImage: "person.badge.plus"
+                        )
+                    }
+
+                    NavigationLink {
+                        submenuPage(title: "Add Friends") {
                             addFriendsCard
                         }
-                        .padding(20)
+                    } label: {
+                        profileMenuRow(
+                            title: "Add friends",
+                            subtitle: "Search users and send requests",
+                            systemImage: "magnifyingglass"
+                        )
+                    }
+
+                    NavigationLink {
+                        settingsPage
+                    } label: {
+                        profileMenuRow(
+                            title: "Settings",
+                            subtitle: "App preferences and account actions",
+                            systemImage: "gearshape.fill"
+                        )
+                    }
+                }
+
+                Section {
+                    Button("Sign Out", role: .destructive) {
+                        Task {
+                            try? await supabase.auth.signOut()
+                        }
                     }
                 }
             }
+            .scrollContentBackground(.hidden)
+            .background(AppTheme.appBackground)
+            .navigationTitle("Profile Menu")
+            .navigationBarTitleDisplayMode(.inline)
         }
         .task {
             await loadDashboard()
@@ -251,64 +339,21 @@ struct ProfileHubView: View {
             guard let newItem else { return }
             loadSelectedAvatar(newItem)
         }
-        .sheet(isPresented: $showSettingsSheet) {
-            settingsSheet
-        }
     }
 
-    private var headerCard: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Your convoy dashboard")
-                        .font(.largeTitle.weight(.bold))
-                        .foregroundStyle(AppTheme.textPrimary)
+    private var profileSummaryText: String {
+        let name = profile?.preferredName?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let username = profile?.username?.trimmingCharacters(in: .whitespacesAndNewlines)
 
-                    Text("Manage your profile, review friend requests, and invite new people into your network.")
-                        .font(.subheadline)
-                        .foregroundStyle(AppTheme.textSecondary)
-                }
-
-                Spacer(minLength: 16)
-
-                Menu {
-                    Button("Settings") {
-                        showSettingsSheet = true
-                    }
-
-                    Button("Refresh") {
-                        Task {
-                            await loadDashboard()
-                        }
-                    }
-
-                    Button("Sign Out", role: .destructive) {
-                        Task {
-                            try? await supabase.auth.signOut()
-                        }
-                    }
-                } label: {
-                    Image(systemName: "person.crop.circle")
-                        .font(.system(size: 28, weight: .medium))
-                        .foregroundStyle(AppTheme.textPrimary)
-                }
-            }
-
-            if let dashboardError {
-                statusBanner(text: dashboardError, color: .red, isError: true)
-            }
-
-            if let friendStatusMessage {
-                statusBanner(text: friendStatusMessage, color: AppTheme.brandAccent)
-            }
+        if let name, !name.isEmpty, let username, !username.isEmpty {
+            return "\(name)  @\(username)"
         }
-        .padding(20)
-        .background(AppTheme.surfaceCard)
-        .overlay(
-            RoundedRectangle(cornerRadius: AppTheme.cardCornerRadius)
-                .stroke(AppTheme.borderSubtle, lineWidth: 1)
-        )
-        .clipShape(RoundedRectangle(cornerRadius: AppTheme.cardCornerRadius))
+
+        if let username, !username.isEmpty {
+            return "@\(username)"
+        }
+
+        return "Manage your account details"
     }
 
     private var friendRequestsCard: some View {
@@ -558,42 +603,24 @@ struct ProfileHubView: View {
         (selectedAvatarData != nil || !(profile?.avatarURL?.isEmpty ?? true))
     }
 
-    private var settingsSheet: some View {
-        NavigationStack {
-            List {
-                Section("Account") {
-                    if let profile {
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text(profile.preferredName ?? "Unknown user")
-                                .font(.headline)
-                            Text("@\(profile.username ?? "unknown")")
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-
-                    Button("Sign Out", role: .destructive) {
-                        Task {
-                            try? await supabase.auth.signOut()
-                        }
+    private var settingsPage: some View {
+        List {
+            Section("Account") {
+                if let profile {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(profile.preferredName ?? "Unknown user")
+                            .font(.headline)
+                        Text("@\(profile.username ?? "unknown")")
+                            .foregroundStyle(.secondary)
                     }
                 }
 
-                Section("Settings") {
-                    Text("More settings can live here as the dashboard grows.")
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .navigationTitle("Profile Menu")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Done") {
-                        showSettingsSheet = false
-                    }
-                }
+                Text("More settings and account preferences can be added here as the app grows.")
+                    .foregroundStyle(.secondary)
             }
         }
-        .presentationDetents([.medium])
+        .navigationTitle("Settings")
+        .navigationBarTitleDisplayMode(.inline)
     }
 
     private func profileField(title: String, text: Binding<String>, prompt: String) -> some View {
@@ -786,6 +813,35 @@ struct ProfileHubView: View {
     private func friendRequestActionID(for requestID: Int64) -> String {
         "request-\(requestID)"
     }
+
+    private func profileMenuRow(title: String, subtitle: String, systemImage: String) -> some View {
+        HStack(spacing: 14) {
+            Image(systemName: systemImage)
+                .font(.headline)
+                .foregroundStyle(AppTheme.brandAccent)
+                .frame(width: 28)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .foregroundStyle(AppTheme.textPrimary)
+
+                Text(subtitle)
+                    .font(.footnote)
+                    .foregroundStyle(AppTheme.textSecondary)
+            }
+        }
+        .padding(.vertical, 6)
+    }
+
+    private func submenuPage<Content: View>(title: String, @ViewBuilder content: () -> Content) -> some View {
+        ScrollView {
+            content()
+                .padding(20)
+        }
+        .background(AppTheme.appBackground.ignoresSafeArea())
+        .navigationTitle(title)
+        .navigationBarTitleDisplayMode(.inline)
+    }
 }
 
 private struct HomeFeatureCard: View {
@@ -815,6 +871,35 @@ private struct HomeFeatureCard: View {
                 .stroke(AppTheme.borderSubtle, lineWidth: 1)
         )
         .clipShape(RoundedRectangle(cornerRadius: 22))
+    }
+}
+
+private struct FeaturePlaceholderView: View {
+    let title: String
+    let subtitle: String
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                AppTheme.appBackground
+                    .ignoresSafeArea()
+
+                VStack(alignment: .leading, spacing: 18) {
+                    Text(title)
+                        .font(.largeTitle.weight(.bold))
+                        .foregroundStyle(AppTheme.textPrimary)
+
+                    Text(subtitle)
+                        .font(.subheadline)
+                        .foregroundStyle(AppTheme.textSecondary)
+
+                    Spacer()
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .padding(24)
+            }
+            .navigationBarTitleDisplayMode(.inline)
+        }
     }
 }
 
