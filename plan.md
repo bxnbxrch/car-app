@@ -4,11 +4,12 @@
 
 Build a modern iOS app for managing car convoys with push-to-talk, real-time minimap tracking of friends' locations, and convoy coordination. Three-phase approach: authentication → profile onboarding → blank main interface ready for convoy features.
 
-**Tech Stack:**
+**Confirmed Tech Stack:**
 - **Frontend:** SwiftUI (iOS 16+), Keychain for secure token storage
-- **Backend:** Node.js/Express (or Python choice), PostgreSQL, Redis, MinIO/S3-compatible storage
-- **Authentication:** OAuth 2.0 (Sign in with Apple, Google, Facebook) + Email with verification
-- **Hosting:** User's VPS for all backend services
+- **Backend:** Node.js + Express, PostgreSQL, Redis
+- **Authentication:** Firebase Auth (free tier) — Google OAuth + Email/OTP verification
+- **File Storage:** Simple uploads to Node.js server (keep files small on disk)
+- **Hosting:** VPS for Node.js API & PostgreSQL; Firebase Auth (Google-hosted, free)
 
 ---
 
@@ -16,35 +17,23 @@ Build a modern iOS app for managing car convoys with push-to-talk, real-time min
 
 ### 1.1 Server Requirements
 
-**Tech Stack Choice** (decide on one):
-- Option A: Node.js + Express (recommended for simplicity)
-- Option B: Python + FastAPI/Django
-- Option C: Go + Gin
+**Confirmed: Node.js + Express**
 
 **Core Services Needed:**
-1. **API Server** — REST or GraphQL endpoints for auth, user profiles, convoy management
-2. **PostgreSQL Database** — User accounts, profiles, convoy memberships, locations history
-3. **Redis** — Session management, token refresh, rate limiting
-4. **Email Service** — SendGrid/Mailgun for verification emails and OTP codes
-5. **File Storage** — MinIO (S3-compatible) on VPS for profile pictures
-6. **JWT Auth** — Token generation, validation, refresh flow
+1. **Node.js API Server** — Express.js endpoints for user profiles, convoys, locations
+2. **PostgreSQL Database** — Profiles, convoy memberships, locations (Firebase Auth manages user accounts separately)
+3. **Redis** — Session management, rate limiting
+4. **Firebase Auth** (free tier) — Google & Facebook OAuth, email/OTP verification, token management (no backend auth code needed)
+5. **File Storage** — Simple file upload endpoint on Node.js server (store in `/uploads`, keep small <5MB per image)
 
 ### 1.2 Database Schema (PostgreSQL)
 
-```
-users
-  - id (UUID, PK)
-  - email (unique)
-  - email_verified_at
-  - password_hash (nullable if OAuth)
-  - oauth_provider (google/facebook/apple)
-  - oauth_id
-  - created_at
-  - updated_at
+**Note:** Firebase Auth manages user accounts & authentication separately. Your VPS database stores only app data (profiles, convoys, locations). No password hashes or auth tokens in your DB.
 
+```
 profiles
   - id (UUID, PK)
-  - user_id (FK → users)
+  - firebase_uid (unique, links to Firebase Auth user)
   - username (unique)
   - display_name
   - profile_picture_url
@@ -55,13 +44,6 @@ profiles
   - car_plate (nullable)
   - created_at
   - updated_at
-
-email_verifications
-  - id (UUID, PK)
-  - user_id (FK → users)
-  - otp_code
-  - expires_at
-  - verified_at (nullable)
 
 convoys
   - id (UUID, PK)
@@ -86,47 +68,59 @@ locations
   - convoy_id (FK → convoys, nullable)
 ```
 
-### 1.3 API Endpoints (to be implemented)
+### 1.3 API Endpoints (Your Node.js Server)
 
-**Auth:**
-- `POST /auth/register` — Email signup
-- `POST /auth/email/verify-otp` — Verify email with OTP
-- `POST /auth/oauth/initiate` — Start OAuth flow
-- `POST /auth/oauth/callback` — Handle OAuth callback
-- `POST /auth/login` — Email/password login
-- `POST /auth/refresh-token` — Refresh JWT
-- `POST /auth/logout` — Invalidate token
+**Auth (Handled by Firebase — No custom auth endpoints needed):**
+- Firebase SDK on iOS handles: email/password signup, OTP verification, Google & Facebook OAuth
+- Your Node.js does NOT implement auth; Firebase is your auth provider
 
-**Profiles:**
+**Profiles (Your custom Node.js endpoints):**
+- `POST /api/profiles/create` — Create initial profile (username, display name, photo, car info). Requires Firebase ID token in `Authorization: Bearer <idToken>` header
 - `GET /api/profiles/me` — Get authenticated user's profile
-- `POST /api/profiles/create` — Create initial profile (username, display name, etc.)
 - `PATCH /api/profiles/me` — Update profile info
-- `POST /api/profiles/me/picture` — Upload profile picture
+- `POST /api/profiles/me/picture` — Upload profile picture (multipart/form-data, max 5MB). Stores in `/uploads` directory
 - `GET /api/profiles/:username` — Get public profile by username
+- `POST /api/profiles/check-username` — Check if username is available (used during onboarding)
 
-**Convoys:**
+**Convoys (Your custom Node.js endpoints):**
 - `POST /api/convoys` — Create new convoy
 - `GET /api/convoys/active` — List user's active convoys
 - `POST /api/convoys/:convoyId/join` — Join convoy
 - `POST /api/convoys/:convoyId/leave` — Leave convoy
 
-**Locations:**
+**Locations (Your custom Node.js endpoints):**
 - `POST /api/locations/update` — Submit current location
 - `GET /api/convoys/:convoyId/locations` — Get all members' live locations in convoy
 
+**Authentication on All Endpoints:**
+All requests to `/api/*` require Firebase ID token in header: `Authorization: Bearer <idToken>`. 
+Your Node.js middleware verifies token using Firebase Admin SDK (validates signature, checks expiry). If invalid, return 401.
+No JWT refresh flow needed—Firebase handles tokens transparently on iOS (refresh happens in SDK).
+
 ### 1.4 VPS Deployment Checklist
 
-- [ ] Install Node.js/npm (or Python + pip)
+- [ ] Install Node.js/npm
 - [ ] Install PostgreSQL and configure database
 - [ ] Install Redis
-- [ ] Set up MinIO for S3-compatible file storage
 - [ ] Configure reverse proxy (Nginx) and SSL certificates (Let's Encrypt)
-- [ ] Set up email service account (SendGrid/Mailgun API key)
-- [ ] Create `.env` file with secrets (DB connection, API keys, JWT secret, etc.)
-- [ ] Deploy API server
+- [ ] Create Firebase project at console.firebase.google.com (completely free tier) ✓ DONE
+- [ ] Enable Google OAuth in Firebase Console ✓ DONE
+- [ ] Enable Email/Password + OTP in Firebase Console ✓ DONE
+- [ ] Download Firebase Admin SDK service account key (JSON file)
+- [ ] Create `.env` file with secrets:
+  ```
+  DATABASE_URL=postgresql://user:pass@localhost:5432/convoy_db
+  FIREBASE_PROJECT_ID=your-firebase-project-id
+  FIREBASE_PRIVATE_KEY=<from service account key JSON>
+  FIREBASE_CLIENT_EMAIL=<from service account key JSON>
+  REDIS_URL=redis://localhost:6379
+  NODE_ENV=production
+  ```
+- [ ] Deploy Node.js API server
 - [ ] Set up automated backups for PostgreSQL
 - [ ] Configure firewall rules (expose only ports 443/80 for HTTPS)
-- [ ] Document all credentials and connection strings securely
+- [ ] Create `/uploads` directory with proper permissions for profile pictures
+- [ ] Document all credentials securely (Firebase keys, DB connection string)
 
 ---
 
@@ -645,40 +639,59 @@ npm install && npm start
 
 ---
 
-## Next Steps
+## Appendix: Firebase Auth & TestFlight Notes
 
-1. **Confirm security preferences:**
-   - Email OTP or email link for verification?
-   - Firebase Auth or custom JWT?
-   - Managed OAuth (Firebase) or custom handlers?
+### Firebase Auth — Free Tier Details
 
-2. **Decide on backend tech:**
-   - Node.js + Express (recommended)
-   - Python + FastAPI
-   - Go + Gin
-   - Other?
+**Cost:** 100% FREE for:
+- Email/password authentication (unlimited)
+- OAuth (Google, Facebook, etc.) — unlimited
+- OTP verification — unlimited
+- Up to 50,000 unique users per month in free tier
 
-3. **Choose profile photo storage:**
-   - MinIO on VPS (recommended for full control)
-   - AWS S3 (external, easier management)
-   - Cloudinary (CDN, simpler)
+**After 50k users:** Still very cheap (~$0.005 per verification). Unlikely to hit costs at app launch.
 
-4. **Confirm social login priorities:**
-   - Sign in with Apple (built-in, required)
-   - Google (Firebase or custom)
-   - Facebook (Firebase or custom)
-   - Allow email-only signup?
+**Setup:**
+1. Go to https://console.firebase.google.com
+2. Create new project (free)
+3. Enable "Authentication" service
+4. Add Google as sign-in provider (uses your Google account)
+5. Add Facebook as sign-in provider (requires Facebook Developer account, also free)
+6. Under iOS settings, add your app's bundle ID (`jh.car-app` or what you choose)
+7. Download GoogleService-Info.plist and add to Xcode
 
-5. **Review and finalize design system** with mockups
+**On iOS Side:**
+- Use FirebaseAuth SDK (installed via CocoaPods)
+- Handle email signup with OTP via `Auth.auth().createUser(withEmail:password:)`
+- Firebase SDK automatically sends OTP emails
+- No custom backend code for auth—Firebase is the auth server
 
 ---
 
-## Questions for Ben
+### TestFlight Explained
 
-1. **Backend preference:** Node.js/Express, Python, Go, or other?
-2. **Social logins:** Prioritize which ones? Email-only fallback needed?
-3. **Email verification:** OTP or magic link?
-4. **Auth architecture:** Firebase Auth or custom JWT with VPS?
-5. **Profile picture storage:** MinIO on VPS or external service?
-6. **App deployment:** Testflight first, or direct App Store?
-7. **Privacy/data:** GDPR compliance needed? Data residency requirements?
+**TestFlight** is Apple's free beta testing platform. Instead of going directly to App Store:
+
+1. **Local Testing:** Build and run on your iPhone via Xcode (for development)
+2. **TestFlight Beta:** Upload build to TestFlight, distribute to test users (family, friends) via TestFlight app
+3. **Public Beta:** Optional—allow anyone with a link to test
+4. **App Store Release:** Submit to App Store for review (7-14 days typically)
+
+**Timeline for your app:**
+- Phase 1-2-3 complete (auth, profile, main interface) → Build and test locally in Xcode simulator
+- Ready to show family/friends → Push to TestFlight
+- Minor fixes → TestFlight beta 2, 3, etc.
+- Polished & ready → Submit to App Store
+
+**Recommended approach:** TestFlight first (before App Store) to iron out bugs with real users on real hardware.
+
+---
+
+## Tech Debt & Future Improvements
+
+- [ ] Implement push notifications for convoy invites (APNs setup)
+- [ ] Add real convoy map (MapKit, display friend locations)
+- [ ] Implement PTT (WebRTC, Twilio, Agora)
+- [ ] Add convoy messaging/chat
+- [ ] Caching strategy for locations (reduce API calls)
+- [ ] Offline support (sync when reconnected)
