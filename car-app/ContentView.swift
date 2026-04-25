@@ -12,6 +12,195 @@ import Supabase
 
 struct ContentView: View {
     @State private var profile: UserProfileRow?
+    @State private var isLoadingProfile = true
+    @State private var showProfileHub = false
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                AppTheme.appBackground
+                    .ignoresSafeArea()
+
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 20) {
+                        homeHeader
+                        convoyStatusCard
+                        featureGrid
+                        nextStepsCard
+                    }
+                    .padding(20)
+                }
+            }
+            .navigationBarHidden(true)
+        }
+        .task {
+            await refreshHomeProfile()
+        }
+        .sheet(isPresented: $showProfileHub, onDismiss: {
+            Task {
+                await refreshHomeProfile()
+            }
+        }) {
+            ProfileHubView()
+        }
+    }
+
+    private var homeHeader: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Convoy")
+                        .font(.caption.weight(.semibold))
+                        .textCase(.uppercase)
+                        .foregroundStyle(AppTheme.brandAccent)
+
+                    Text("Home base for your next drive.")
+                        .font(.system(size: 34, weight: .bold, design: .rounded))
+                        .foregroundStyle(AppTheme.textPrimary)
+
+                    Text("Use this dashboard to jump into convoys, friends, and route planning. Your profile tools live under the avatar in the top right.")
+                        .font(.subheadline)
+                        .foregroundStyle(AppTheme.textSecondary)
+                }
+
+                Spacer(minLength: 16)
+
+                Button {
+                    showProfileHub = true
+                } label: {
+                    Group {
+                        if isLoadingProfile {
+                            ProgressView()
+                                .tint(AppTheme.brandAccent)
+                        } else {
+                            AvatarImageView(avatarReference: profile?.avatarURL, size: 52)
+                        }
+                    }
+                    .frame(width: 52, height: 52)
+                    .background(AppTheme.surfaceField)
+                    .clipShape(Circle())
+                    .overlay(
+                        Circle()
+                            .stroke(AppTheme.borderAccent, lineWidth: 1)
+                    )
+                }
+                .buttonStyle(.plain)
+            }
+
+            HStack(spacing: 12) {
+                homeStatPill(title: "Friends", value: "Social")
+                homeStatPill(title: "Convoys", value: "Soon")
+                homeStatPill(title: "Fuel", value: "Soon")
+            }
+        }
+        .padding(20)
+        .background(AppTheme.surfaceCard)
+        .overlay(
+            RoundedRectangle(cornerRadius: AppTheme.cardCornerRadius)
+                .stroke(AppTheme.borderSubtle, lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: AppTheme.cardCornerRadius))
+    }
+
+    private var convoyStatusCard: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Label("Active convoy", systemImage: "car.2.fill")
+                .font(.headline)
+                .foregroundStyle(AppTheme.textPrimary)
+
+            Text("No convoy is active yet.")
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(AppTheme.textPrimary)
+
+            Text("From here the app will eventually launch live convoy sessions, member maps, and trip coordination. For now this is your landing page after sign-in.")
+                .font(.subheadline)
+                .foregroundStyle(AppTheme.textSecondary)
+        }
+        .padding(20)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(AppTheme.surfaceCard)
+        .overlay(
+            RoundedRectangle(cornerRadius: AppTheme.cardCornerRadius)
+                .stroke(AppTheme.borderSubtle, lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: AppTheme.cardCornerRadius))
+    }
+
+    private var featureGrid: some View {
+        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 16) {
+            HomeFeatureCard(
+                title: "Friends",
+                subtitle: "Send requests and manage your network from the avatar menu.",
+                systemImage: "person.2.fill"
+            )
+            HomeFeatureCard(
+                title: "Create Convoy",
+                subtitle: "Set up group drives, invite friends, and launch shared trips.",
+                systemImage: "road.lanes"
+            )
+            HomeFeatureCard(
+                title: "Join Convoy",
+                subtitle: "Use invite links or codes when convoy flows are added.",
+                systemImage: "rectangle.and.hand.point.up.left.fill"
+            )
+            HomeFeatureCard(
+                title: "Fuel Prices",
+                subtitle: "Nearby stations and filters will live here in a later phase.",
+                systemImage: "fuelpump.fill"
+            )
+        }
+    }
+
+    private var nextStepsCard: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Planned next modules")
+                .font(.headline)
+                .foregroundStyle(AppTheme.textPrimary)
+
+            Text("Based on the project outline, the next major screens after this home page are friends lists, add-friends flows, convoy creation, convoy joining, and an active convoy map.")
+                .font(.subheadline)
+                .foregroundStyle(AppTheme.textSecondary)
+        }
+        .padding(20)
+        .background(AppTheme.surfaceCard)
+        .overlay(
+            RoundedRectangle(cornerRadius: AppTheme.cardCornerRadius)
+                .stroke(AppTheme.borderSubtle, lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: AppTheme.cardCornerRadius))
+    }
+
+    private func homeStatPill(title: String, value: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(AppTheme.textSecondary)
+            Text(value)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(AppTheme.textPrimary)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(AppTheme.surfaceSecondary)
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+    }
+
+    private func refreshHomeProfile() async {
+        await MainActor.run {
+            isLoadingProfile = true
+        }
+
+        let loadedProfile = try? await fetchCurrentUserProfile()
+
+        await MainActor.run {
+            profile = loadedProfile
+            isLoadingProfile = false
+        }
+    }
+}
+
+struct ProfileHubView: View {
+    @State private var profile: UserProfileRow?
     @State private var username = ""
     @State private var preferredName = ""
     @State private var carModel = ""
@@ -596,6 +785,36 @@ struct ContentView: View {
 
     private func friendRequestActionID(for requestID: Int64) -> String {
         "request-\(requestID)"
+    }
+}
+
+private struct HomeFeatureCard: View {
+    let title: String
+    let subtitle: String
+    let systemImage: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Image(systemName: systemImage)
+                .font(.title2)
+                .foregroundStyle(AppTheme.brandAccent)
+
+            Text(title)
+                .font(.headline)
+                .foregroundStyle(AppTheme.textPrimary)
+
+            Text(subtitle)
+                .font(.subheadline)
+                .foregroundStyle(AppTheme.textSecondary)
+        }
+        .frame(maxWidth: .infinity, minHeight: 150, alignment: .topLeading)
+        .padding(18)
+        .background(AppTheme.surfaceCard)
+        .overlay(
+            RoundedRectangle(cornerRadius: 22)
+                .stroke(AppTheme.borderSubtle, lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 22))
     }
 }
 
