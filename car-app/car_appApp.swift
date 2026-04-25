@@ -7,6 +7,7 @@
 
 import SwiftUI
 import SwiftData
+import Supabase
 
 @main
 struct car_appApp: App {
