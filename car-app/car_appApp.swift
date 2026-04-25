@@ -35,12 +35,24 @@ struct car_appApp: App {
                     LoginView(isLoggedIn: $isLoggedIn)
                 }
             }
+            .task {
+                // Restore existing session from Keychain on launch,
+                // then keep listening for auth state changes (sign-out,
+                // token revocation, etc.) to update the UI reactively.
+                for await (event, _) in supabase.auth.authStateChanges {
+                    switch event {
+                    case .initialSession, .signedIn, .tokenRefreshed, .userUpdated:
+                        await MainActor.run { isLoggedIn = true }
+                    case .signedOut, .passwordRecovery, .userDeleted:
+                        await MainActor.run { isLoggedIn = false }
+                    default:
+                        break
+                    }
+                }
+            }
             .onOpenURL { url in
                 Task {
                     try? await supabase.auth.session(from: url)
-                    if let _ = try? await supabase.auth.session {
-                        await MainActor.run { isLoggedIn = true }
-                    }
                 }
             }
         }
