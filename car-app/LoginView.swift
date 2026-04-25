@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import AuthenticationServices
 import Supabase
 
 struct LoginView: View {
@@ -21,6 +22,9 @@ struct LoginView: View {
     @State private var confirmPassword = ""
     @State private var isLoading = false
     @State private var errorMessage: String?
+    @State private var authSession: ASWebAuthenticationSession?
+
+    private let presentationContextProvider = WebAuthenticationPresentationContextProvider()
 
     var body: some View {
         NavigationStack {
@@ -93,6 +97,31 @@ struct LoginView: View {
                                 .clipShape(RoundedRectangle(cornerRadius: 16))
                             }
                             .disabled(!primaryActionEnabled || isLoading)
+
+                            googleDivider
+
+                            Button(action: signInWithGoogle) {
+                                HStack(spacing: 12) {
+                                    Image("google-logo")
+                                        .renderingMode(.original)
+                                        .resizable()
+                                        .scaledToFit()
+                                        .frame(width: 20, height: 20)
+
+                                    Text("Continue with Google")
+                                        .fontWeight(.semibold)
+                                }
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 16)
+                                .background(googleButtonBackground)
+                                .foregroundStyle(primaryTextColor)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 16)
+                                        .stroke(cardBorderColor, lineWidth: 1)
+                                )
+                                .clipShape(RoundedRectangle(cornerRadius: 16))
+                            }
+                            .disabled(isLoading)
 
                             if let errorMessage {
                                 Text(errorMessage)
@@ -190,6 +219,65 @@ struct LoginView: View {
         }
     }
 
+    private func signInWithGoogle() {
+        isLoading = true
+        errorMessage = nil
+
+        Task {
+            do {
+                let redirectURL = URL(string: "driveout://auth-callback")!
+                let oauthURL = try supabase.auth.getOAuthSignInURL(
+                    provider: .google,
+                    redirectTo: redirectURL
+                )
+
+                await MainActor.run {
+                    startWebAuthentication(with: oauthURL)
+                }
+            } catch {
+                await MainActor.run {
+                    errorMessage = error.localizedDescription
+                    isLoading = false
+                }
+            }
+        }
+    }
+
+    private func startWebAuthentication(with url: URL) {
+        let session = ASWebAuthenticationSession(
+            url: url,
+            callbackURLScheme: "driveout"
+        ) { callbackURL, error in
+            Task { @MainActor in
+                if let authError = error as? ASWebAuthenticationSessionError,
+                   authError.code == .canceledLogin {
+                    isLoading = false
+                    return
+                }
+
+                guard let callbackURL else {
+                    errorMessage = error?.localizedDescription ?? "Google sign-in failed."
+                    isLoading = false
+                    return
+                }
+
+                do {
+                    try await supabase.auth.session(from: callbackURL)
+                    isLoggedIn = true
+                    isLoading = false
+                } catch {
+                    errorMessage = error.localizedDescription
+                    isLoading = false
+                }
+            }
+        }
+
+        session.presentationContextProvider = presentationContextProvider
+        session.prefersEphemeralWebBrowserSession = false
+        authSession = session
+        session.start()
+    }
+
     private var verificationPendingCard: some View {
         VStack(spacing: 20) {
             Image(systemName: "envelope.badge.shield.half.filled")
@@ -222,6 +310,22 @@ struct LoginView: View {
             }
         }
         .frame(maxWidth: .infinity)
+    }
+
+    private var googleDivider: some View {
+        HStack(spacing: 12) {
+            Rectangle()
+                .fill(cardBorderColor)
+                .frame(height: 1)
+
+            Text("or")
+                .font(.footnote)
+                .foregroundStyle(secondaryTextColor)
+
+            Rectangle()
+                .fill(cardBorderColor)
+                .frame(height: 1)
+        }
     }
 
     private var backgroundView: some View {
@@ -339,6 +443,10 @@ struct LoginView: View {
         colorScheme == .dark ? Color.white.opacity(0.18) : Color.black.opacity(0.18)
     }
 
+    private var googleButtonBackground: Color {
+        colorScheme == .dark ? Color.white.opacity(0.08) : Color.white
+    }
+
     private var brandBlue: Color {
         Color(red: 0.05, green: 0.5, blue: 1.0)
     }
@@ -349,6 +457,24 @@ struct LoginView: View {
 
     private var logoImageName: String {
         "driveout-logo"
+    }
+}
+
+final class WebAuthenticationPresentationContextProvider: NSObject, ASWebAuthenticationPresentationContextProviding {
+    func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
+        let windowScenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+
+        if let keyWindow = windowScenes
+            .flatMap(\.windows)
+            .first(where: \.isKeyWindow) {
+            return keyWindow
+        }
+
+        if let firstWindow = windowScenes.flatMap(\.windows).first {
+            return firstWindow
+        }
+
+        return ASPresentationAnchor(windowScene: windowScenes.first!)
     }
 }
 

@@ -35,7 +35,19 @@ struct ContentView: View {
                 }
             }
         } detail: {
-            Text("Select an item")
+            VStack(spacing: 24) {
+                Image("driveout-logo-darkmode")
+                    .renderingMode(.original)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(maxWidth: 280)
+
+                Text("Select an item")
+                    .font(.headline)
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .padding()
         }
     }
 

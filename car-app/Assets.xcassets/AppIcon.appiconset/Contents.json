@@ -1,6 +1,7 @@
 {
   "images" : [
     {
+      "filename" : "driveout_icon_dark_1024_transparent.png",
       "idiom" : "universal",
       "platform" : "ios",
       "size" : "1024x1024"
