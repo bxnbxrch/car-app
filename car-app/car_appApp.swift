@@ -12,6 +12,8 @@ import Supabase
 @main
 struct car_appApp: App {
     @State private var isLoggedIn = false
+    @AppStorage("local_onboarding_complete") private var hasCompletedOnboarding = false
+    @AppStorage("pending_profile_payload_json") private var pendingProfilePayloadJSON = ""
 
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
@@ -30,7 +32,15 @@ struct car_appApp: App {
         WindowGroup {
             Group {
                 if isLoggedIn {
-                    ContentView()
+                    if hasCompletedOnboarding {
+                        ContentView()
+                    } else {
+                        PostLoginOnboardingView { payload in
+                            // Prepared and stored locally for future backend submission.
+                            pendingProfilePayloadJSON = payload.jsonString ?? ""
+                            hasCompletedOnboarding = true
+                        }
+                    }
                 } else {
                     LoginView(isLoggedIn: $isLoggedIn)
                 }
