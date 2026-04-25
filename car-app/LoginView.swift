@@ -13,8 +13,12 @@ struct LoginView: View {
 
     @Binding var isLoggedIn: Bool
 
+    private enum Mode { case signIn, signUp, awaitingVerification }
+
+    @State private var mode: Mode = .signIn
     @State private var email = ""
     @State private var password = ""
+    @State private var confirmPassword = ""
     @State private var isLoading = false
     @State private var errorMessage: String?
 
@@ -30,53 +34,83 @@ struct LoginView: View {
                     brandHeader
 
                     VStack(alignment: .leading, spacing: 18) {
-                        Text("Welcome back")
-                            .font(.title2)
-                            .fontWeight(.bold)
-                            .foregroundStyle(primaryTextColor)
+                        if mode == .awaitingVerification {
+                            verificationPendingCard
+                        } else {
+                            Text(mode == .signIn ? "Welcome back" : "Create an account")
+                                .font(.title2)
+                                .fontWeight(.bold)
+                                .foregroundStyle(primaryTextColor)
 
-                        Text("Sign in to find drives, locations, fuel prices, and your car data.")
-                            .font(.subheadline)
-                            .foregroundStyle(secondaryTextColor)
+                            Text(mode == .signIn
+                                 ? "Sign in to find drives, locations, fuel prices, and your car data."
+                                 : "Enter your details below to get started with Driveout.")
+                                .font(.subheadline)
+                                .foregroundStyle(secondaryTextColor)
 
-                        VStack(spacing: 14) {
-                            inputField(
-                                title: "Email",
-                                text: $email,
-                                systemImage: "envelope"
-                            )
+                            VStack(spacing: 14) {
+                                inputField(
+                                    title: "Email",
+                                    text: $email,
+                                    systemImage: "envelope"
+                                )
 
-                            secureInputField(
-                                title: "Password",
-                                text: $password,
-                                systemImage: "lock"
-                            )
-                        }
+                                secureInputField(
+                                    title: "Password",
+                                    text: $password,
+                                    systemImage: "lock"
+                                )
 
-                        Button(action: signIn) {
-                            Group {
-                                if isLoading {
-                                    ProgressView()
-                                        .tint(.white)
-                                } else {
-                                    Text("Sign In")
-                                        .fontWeight(.semibold)
+                                if mode == .signUp {
+                                    secureInputField(
+                                        title: "Confirm Password",
+                                        text: $confirmPassword,
+                                        systemImage: "lock.shield"
+                                    )
+
+                                    if !confirmPassword.isEmpty && password != confirmPassword {
+                                        Text("Passwords do not match")
+                                            .font(.caption)
+                                            .foregroundStyle(.red)
+                                    }
                                 }
                             }
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 16)
-                            .background(canSignIn && !isLoading ? brandBlue : disabledButtonColor)
-                            .foregroundStyle(.white)
-                            .clipShape(RoundedRectangle(cornerRadius: 16))
-                        }
-                        .disabled(!canSignIn || isLoading)
 
-                        if let errorMessage {
-                            Text(errorMessage)
-                                .font(.footnote)
-                                .foregroundStyle(.red)
-                                .multilineTextAlignment(.center)
+                            Button(action: mode == .signIn ? signIn : signUp) {
+                                Group {
+                                    if isLoading {
+                                        ProgressView()
+                                            .tint(.white)
+                                    } else {
+                                        Text(mode == .signIn ? "Sign In" : "Create Account")
+                                            .fontWeight(.semibold)
+                                    }
+                                }
                                 .frame(maxWidth: .infinity)
+                                .padding(.vertical, 16)
+                                .background(primaryActionEnabled ? brandBlue : disabledButtonColor)
+                                .foregroundStyle(.white)
+                                .clipShape(RoundedRectangle(cornerRadius: 16))
+                            }
+                            .disabled(!primaryActionEnabled || isLoading)
+
+                            if let errorMessage {
+                                Text(errorMessage)
+                                    .font(.footnote)
+                                    .foregroundStyle(.red)
+                                    .multilineTextAlignment(.center)
+                                    .frame(maxWidth: .infinity)
+                            }
+
+                            HStack {
+                                Spacer()
+                                Button(action: toggleMode) {
+                                    Text(mode == .signIn ? "Don't have an account? Sign up" : "Already have an account? Sign in")
+                                        .font(.footnote)
+                                        .foregroundStyle(brandBlue)
+                                }
+                                Spacer()
+                            }
                         }
                     }
                     .padding(24)
@@ -96,12 +130,24 @@ struct LoginView: View {
         }
     }
 
-    private var canSignIn: Bool {
-        !email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !password.isEmpty
+    private var primaryActionEnabled: Bool {
+        let trimmedEmail = email.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedEmail.isEmpty && !password.isEmpty else { return false }
+        if mode == .signUp {
+            return !confirmPassword.isEmpty && password == confirmPassword
+        }
+        return true
+    }
+
+    private func toggleMode() {
+        errorMessage = nil
+        confirmPassword = ""
+        password = ""
+        mode = mode == .signIn ? .signUp : .signIn
     }
 
     private func signIn() {
-        guard canSignIn else { return }
+        guard primaryActionEnabled else { return }
         isLoading = true
         errorMessage = nil
         Task {
@@ -118,6 +164,63 @@ struct LoginView: View {
                 }
             }
         }
+    }
+
+    private func signUp() {
+        guard primaryActionEnabled else { return }
+        isLoading = true
+        errorMessage = nil
+        Task {
+            do {
+                try await supabase.auth.signUp(
+                    email: email.trimmingCharacters(in: .whitespacesAndNewlines),
+                    password: password
+                )
+                await MainActor.run {
+                    isLoading = false
+                    mode = .awaitingVerification
+                }
+            } catch {
+                await MainActor.run {
+                    errorMessage = error.localizedDescription
+                    isLoading = false
+                }
+            }
+        }
+    }
+
+    private var verificationPendingCard: some View {
+        VStack(spacing: 20) {
+            Image(systemName: "envelope.badge.shield.half.filled")
+                .font(.system(size: 48))
+                .foregroundStyle(brandBlue)
+
+            Text("Check your inbox")
+                .font(.title2)
+                .fontWeight(.bold)
+                .foregroundStyle(primaryTextColor)
+
+            Text("We've sent a verification link to\n**\(email)**. Click it to activate your account, then sign in.")
+                .font(.subheadline)
+                .foregroundStyle(secondaryTextColor)
+                .multilineTextAlignment(.center)
+
+            Button(action: {
+                mode = .signIn
+                errorMessage = nil
+                password = ""
+                confirmPassword = ""
+            }) {
+                Text("Back to Sign In")
+                    .fontWeight(.semibold)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 16)
+                    .background(brandBlue)
+                    .foregroundStyle(.white)
+                    .clipShape(RoundedRectangle(cornerRadius: 16))
+            }
+        }
+        .frame(maxWidth: .infinity)
     }
 
     private var backgroundView: some View {
