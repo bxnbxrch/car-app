@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import Supabase
 
 struct LoginView: View {
     @Environment(\.colorScheme) private var colorScheme
@@ -14,6 +15,8 @@ struct LoginView: View {
 
     @State private var email = ""
     @State private var password = ""
+    @State private var isLoading = false
+    @State private var errorMessage: String?
 
     var body: some View {
         NavigationStack {
@@ -51,19 +54,30 @@ struct LoginView: View {
                         }
 
                         Button(action: signIn) {
-                            Text("Sign In")
-                                .fontWeight(.semibold)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 16)
-                                .background(canSignIn ? brandBlue : disabledButtonColor)
-                                .foregroundStyle(.white)
-                                .clipShape(RoundedRectangle(cornerRadius: 16))
+                            Group {
+                                if isLoading {
+                                    ProgressView()
+                                        .tint(.white)
+                                } else {
+                                    Text("Sign In")
+                                        .fontWeight(.semibold)
+                                }
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 16)
+                            .background(canSignIn && !isLoading ? brandBlue : disabledButtonColor)
+                            .foregroundStyle(.white)
+                            .clipShape(RoundedRectangle(cornerRadius: 16))
                         }
-                        .disabled(!canSignIn)
+                        .disabled(!canSignIn || isLoading)
 
-                        Text("Demo login only for now. Real authentication can be connected next.")
-                            .font(.footnote)
-                            .foregroundStyle(secondaryTextColor)
+                        if let errorMessage {
+                            Text(errorMessage)
+                                .font(.footnote)
+                                .foregroundStyle(.red)
+                                .multilineTextAlignment(.center)
+                                .frame(maxWidth: .infinity)
+                        }
                     }
                     .padding(24)
                     .background(cardBackground)
@@ -88,7 +102,22 @@ struct LoginView: View {
 
     private func signIn() {
         guard canSignIn else { return }
-        isLoggedIn = true
+        isLoading = true
+        errorMessage = nil
+        Task {
+            do {
+                try await supabase.auth.signIn(
+                    email: email.trimmingCharacters(in: .whitespacesAndNewlines),
+                    password: password
+                )
+                await MainActor.run { isLoggedIn = true }
+            } catch {
+                await MainActor.run {
+                    errorMessage = error.localizedDescription
+                    isLoading = false
+                }
+            }
+        }
     }
 
     private var backgroundView: some View {
