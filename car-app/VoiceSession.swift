@@ -352,12 +352,12 @@ actor RelayVoiceSession {
     private func activateAudioSession() throws {
         guard !audioSessionActive else { return }
         let session = AVAudioSession.sharedInstance()
-        try session.setCategory(.playAndRecord, mode: .voiceChat, options: [.defaultToSpeaker, .allowBluetooth])
-        try session.setPreferredSampleRate(Double(voiceFormat.sampleRateHz))
-        try session.setPreferredIOBufferDuration(0.02)
+        // Use .default mode (not .voiceChat) — voiceChat applies AEC which can suppress PTT audio.
+        // Don't set preferredSampleRate: forcing 16kHz triggers a HAL reconfig that causes
+        // the I/O cycle to be abandoned and buffers to be dropped silently. Let the hardware
+        // run at its native rate; AVAudioEngine resamples the 16kHz player node automatically.
+        try session.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .allowBluetoothHFP])
         try session.setActive(true, options: [])
-        // Force speaker — in voiceChat mode the default is earpiece
-        try session.overrideOutputAudioPort(.speaker)
         audioSessionActive = true
         log("audio session activated")
     }
