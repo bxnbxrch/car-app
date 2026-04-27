@@ -633,26 +633,51 @@ fileprivate final class MicCapture {
 fileprivate final class SpeakerPlayback {
     private let engine = AVAudioEngine()
     private let player = AVAudioPlayerNode()
-    private let format: AVAudioFormat
+
+    // Set in start() once we know the actual hardware rate
+    private var playbackFormat: AVAudioFormat?
+    private var converter: AVAudioConverter?
+
+    private let inputSampleRate: Double
+    private let inputChannels: AVAudioChannelCount
     private var isRunning = false
     private var configObserver: NSObjectProtocol?
 
     init(sampleRate: Int, channels: Int) {
-        let desiredChannels = AVAudioChannelCount(max(1, channels))
-        // Float32 non-interleaved is the only reliably supported format for AVAudioPlayerNode on iOS.
-        self.format = AVAudioFormat(
-            commonFormat: .pcmFormatFloat32,
-            sampleRate: Double(sampleRate),
-            channels: desiredChannels,
-            interleaved: false
-        )!
-
+        self.inputSampleRate = Double(sampleRate)
+        self.inputChannels = AVAudioChannelCount(max(1, channels))
         engine.attach(player)
-        engine.connect(player, to: engine.mainMixerNode, format: format)
+        // Don't connect here — we need the audio session active to know the hardware rate.
     }
 
     func start() throws {
         guard !isRunning else { return }
+
+        // Query the hardware's actual sample rate AFTER the audio session is activated.
+        // If we connect the player at 16 kHz and the hardware runs at 48 kHz, AVAudioEngine's
+        // automatic SRC silently fails on some devices. Doing the conversion ourselves is reliable.
+        var hwRate = engine.outputNode.inputFormat(forBus: 0).sampleRate
+        if hwRate <= 0 || hwRate.isNaN { hwRate = 48_000 }
+
+        let fmt = AVAudioFormat(
+            commonFormat: .pcmFormatFloat32,
+            sampleRate: hwRate,
+            channels: 1,
+            interleaved: false
+        )!
+        playbackFormat = fmt
+
+        // Build a cached converter: Int16 mono 16 kHz → Float32 mono hwRate
+        let srcFmt = AVAudioFormat(
+            commonFormat: .pcmFormatInt16,
+            sampleRate: inputSampleRate,
+            channels: inputChannels,
+            interleaved: true
+        )!
+        converter = AVAudioConverter(from: srcFmt, to: fmt)
+
+        // Connect now that we know the format the engine needs.
+        engine.connect(player, to: engine.mainMixerNode, format: fmt)
 
         configObserver = NotificationCenter.default.addObserver(
             forName: .AVAudioEngineConfigurationChange,
@@ -677,10 +702,15 @@ fileprivate final class SpeakerPlayback {
         player.stop()
         engine.stop()
         isRunning = false
+        playbackFormat = nil
+        converter = nil
     }
 
     private func handleConfigChange() {
-        guard isRunning else { return }
+        guard isRunning, let fmt = playbackFormat else { return }
+        // Reconnect nodes — connections can be invalidated after a hardware config change.
+        engine.disconnectNodeOutput(player)
+        engine.connect(player, to: engine.mainMixerNode, format: fmt)
         do {
             engine.prepare()
             try engine.start()
@@ -692,30 +722,53 @@ fileprivate final class SpeakerPlayback {
     }
 
     func enqueue(_ data: Data) {
-        guard isRunning else {
-            print("[VOICE] enqueue: skipped — not running")
+        guard isRunning, let fmt = playbackFormat, let converter = converter else {
+            print("[VOICE] enqueue: skipped — not running or no converter")
             return
         }
-        // Incoming data is Int16 PCM (2 bytes per sample), mono.
-        let bytesPerSample = 2
-        let sampleCount = data.count / bytesPerSample
-        guard sampleCount > 0 else { return }
 
-        let frameCount = AVAudioFrameCount(sampleCount)
-        guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount) else { return }
-        buffer.frameLength = frameCount
-        guard let floatChannelData = buffer.floatChannelData else { return }
-        let channelPtr = floatChannelData[0]
+        // Build an Int16 source buffer from the raw bytes.
+        let srcFmt = converter.inputFormat
+        let inSampleCount = data.count / 2  // 2 bytes per Int16
+        guard inSampleCount > 0 else { return }
 
+        guard let inBuf = AVAudioPCMBuffer(pcmFormat: srcFmt, frameCapacity: AVAudioFrameCount(inSampleCount)) else { return }
+        inBuf.frameLength = AVAudioFrameCount(inSampleCount)
         data.withUnsafeBytes { rawPtr in
-            guard let int16Ptr = rawPtr.baseAddress?.assumingMemoryBound(to: Int16.self) else { return }
-            for i in 0..<sampleCount {
-                channelPtr[i] = Float(int16Ptr[i]) / 32768.0
-            }
+            guard let dst = inBuf.audioBufferList.pointee.mBuffers.mData,
+                  let src = rawPtr.baseAddress else { return }
+            memcpy(dst, src, data.count)
         }
 
-        print("[VOICE] enqueue: \(frameCount) frames, engine=\(engine.isRunning), playing=\(player.isPlaying)")
-        player.scheduleBuffer(buffer, completionHandler: nil)
+        // Convert to the hardware's native Float32 format (with sample rate conversion).
+        let ratio = fmt.sampleRate / inputSampleRate
+        let outCount = AVAudioFrameCount((Double(inSampleCount) * ratio).rounded(.up))
+        guard let outBuf = AVAudioPCMBuffer(pcmFormat: fmt, frameCapacity: outCount) else { return }
+
+        var didProvide = false
+        var convErr: NSError?
+        converter.convert(to: outBuf, error: &convErr) { _, outStatus in
+            if didProvide {
+                outStatus.pointee = .endOfStream
+                return nil
+            }
+            didProvide = true
+            outStatus.pointee = .haveData
+            return inBuf
+        }
+
+        if let err = convErr {
+            print("[VOICE] enqueue: conversion error \(err.localizedDescription)")
+            return
+        }
+
+        guard outBuf.frameLength > 0 else {
+            print("[VOICE] enqueue: conversion produced 0 frames")
+            return
+        }
+
+        print("[VOICE] enqueue: \(inSampleCount)→\(outBuf.frameLength) frames @ \(fmt.sampleRate)Hz, engine=\(engine.isRunning), playing=\(player.isPlaying)")
+        player.scheduleBuffer(outBuf, completionHandler: nil)
     }
 }
 
