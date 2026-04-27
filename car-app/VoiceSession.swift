@@ -83,6 +83,7 @@ actor RelayVoiceSession {
     private var micCapture: MicCapture?
     private var isCapturing = false
     private var speakerPlayback: SpeakerPlayback?
+    private var audioSessionActive = false
     private var presenceListening = false
     private var presenceMuted = false
     private var lastAudioReceivedAt: Date?
@@ -306,7 +307,10 @@ actor RelayVoiceSession {
 
     private func handleAudioData(_ data: Data) async {
         guard !data.isEmpty else { return }
-        startPlaybackIfNeeded()
+        // Don't call startPlaybackIfNeeded() here — that reconfigures AVAudioSession on every packet,
+        // triggering AVAudioEngineConfigurationChange which flushes all queued buffers.
+        // Playback is started once in auth_ok. Just enqueue directly.
+        if speakerPlayback == nil { startPlaybackIfNeeded() }
         speakerPlayback?.enqueue(data)
         let now = Date()
         lastAudioReceivedAt = now
@@ -346,11 +350,15 @@ actor RelayVoiceSession {
     }
 
     private func activateAudioSession() throws {
+        guard !audioSessionActive else { return }
         let session = AVAudioSession.sharedInstance()
         try session.setCategory(.playAndRecord, mode: .voiceChat, options: [.defaultToSpeaker, .allowBluetooth])
         try session.setPreferredSampleRate(Double(voiceFormat.sampleRateHz))
         try session.setPreferredIOBufferDuration(0.02)
         try session.setActive(true, options: [])
+        // Force speaker — in voiceChat mode the default is earpiece
+        try session.overrideOutputAudioPort(.speaker)
+        audioSessionActive = true
         log("audio session activated")
     }
 
@@ -374,8 +382,10 @@ actor RelayVoiceSession {
     }
 
     private func deactivateAudioSession() {
+        guard audioSessionActive else { return }
         do {
             try AVAudioSession.sharedInstance().setActive(false, options: [.notifyOthersOnDeactivation])
+            audioSessionActive = false
         } catch {
             log("audio session deactivate failed: \(error.localizedDescription)")
         }
@@ -682,7 +692,10 @@ fileprivate final class SpeakerPlayback {
     }
 
     func enqueue(_ data: Data) {
-        guard isRunning else { return }
+        guard isRunning else {
+            print("[VOICE] enqueue: skipped — not running")
+            return
+        }
         // Incoming data is Int16 PCM (2 bytes per sample), mono.
         let bytesPerSample = 2
         let sampleCount = data.count / bytesPerSample
@@ -701,6 +714,7 @@ fileprivate final class SpeakerPlayback {
             }
         }
 
+        print("[VOICE] enqueue: \(frameCount) frames, engine=\(engine.isRunning), playing=\(player.isPlaying)")
         player.scheduleBuffer(buffer, completionHandler: nil)
     }
 }
