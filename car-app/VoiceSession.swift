@@ -345,12 +345,22 @@ actor RelayVoiceSession {
         log("mic capture stopped")
     }
 
+    private func activateAudioSession() throws {
+        let session = AVAudioSession.sharedInstance()
+        try session.setCategory(.playAndRecord, mode: .voiceChat, options: [.defaultToSpeaker, .allowBluetooth])
+        try session.setPreferredSampleRate(Double(voiceFormat.sampleRateHz))
+        try session.setPreferredIOBufferDuration(0.02)
+        try session.setActive(true, options: [])
+        log("audio session activated")
+    }
+
     private func startPlaybackIfNeeded() {
         if speakerPlayback == nil {
             speakerPlayback = SpeakerPlayback(sampleRate: voiceFormat.sampleRateHz, channels: voiceFormat.channels)
         }
 
         do {
+            try activateAudioSession()
             try speakerPlayback?.start()
         } catch {
             log("speaker playback failed to start: \(error.localizedDescription)")
@@ -542,11 +552,7 @@ fileprivate final class MicCapture {
     func start(onFrame: @escaping (Data) -> Void) throws {
         self.onFrame = onFrame
 
-        let session = AVAudioSession.sharedInstance()
-        try session.setCategory(.playAndRecord, mode: .voiceChat, options: [.defaultToSpeaker, .allowBluetooth])
-        try session.setPreferredSampleRate(desiredSampleRate)
-        try session.setActive(true, options: [])
-
+        // Audio session is owned by RelayVoiceSession; activated before this is called.
         let input = engine.inputNode
         let inputFormat = input.inputFormat(forBus: 0)
         let outputFormat = AVAudioFormat(
@@ -597,7 +603,13 @@ fileprivate final class MicCapture {
         guard let outBuffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: capacity) else { return nil }
 
         var error: NSError?
-        let inputBlock: AVAudioConverterInputBlock = { inNumPackets, outStatus in
+        var didProvide = false
+        let inputBlock: AVAudioConverterInputBlock = { _, outStatus in
+            if didProvide {
+                outStatus.pointee = .endOfStream
+                return nil
+            }
+            didProvide = true
             outStatus.pointee = .haveData
             return buffer
         }
@@ -613,14 +625,16 @@ fileprivate final class SpeakerPlayback {
     private let player = AVAudioPlayerNode()
     private let format: AVAudioFormat
     private var isRunning = false
+    private var configObserver: NSObjectProtocol?
 
     init(sampleRate: Int, channels: Int) {
         let desiredChannels = AVAudioChannelCount(max(1, channels))
+        // Float32 non-interleaved is the only reliably supported format for AVAudioPlayerNode on iOS.
         self.format = AVAudioFormat(
-            commonFormat: .pcmFormatInt16,
+            commonFormat: .pcmFormatFloat32,
             sampleRate: Double(sampleRate),
             channels: desiredChannels,
-            interleaved: true
+            interleaved: false
         )!
 
         engine.attach(player)
@@ -629,10 +643,14 @@ fileprivate final class SpeakerPlayback {
 
     func start() throws {
         guard !isRunning else { return }
-        let session = AVAudioSession.sharedInstance()
-        try session.setCategory(.playAndRecord, mode: .voiceChat, options: [.defaultToSpeaker, .allowBluetooth])
-        try session.setPreferredSampleRate(format.sampleRate)
-        try session.setActive(true, options: [])
+
+        configObserver = NotificationCenter.default.addObserver(
+            forName: .AVAudioEngineConfigurationChange,
+            object: engine,
+            queue: .main
+        ) { [weak self] _ in
+            self?.handleConfigChange()
+        }
 
         engine.prepare()
         try engine.start()
@@ -641,29 +659,45 @@ fileprivate final class SpeakerPlayback {
     }
 
     func stop() {
+        if let obs = configObserver {
+            NotificationCenter.default.removeObserver(obs)
+            configObserver = nil
+        }
         guard isRunning else { return }
         player.stop()
         engine.stop()
         isRunning = false
     }
 
+    private func handleConfigChange() {
+        guard isRunning else { return }
+        do {
+            engine.prepare()
+            try engine.start()
+            player.play()
+            print("[VOICE] SpeakerPlayback engine restarted after config change")
+        } catch {
+            print("[VOICE] SpeakerPlayback engine restart failed: \(error)")
+        }
+    }
+
     func enqueue(_ data: Data) {
         guard isRunning else { return }
-        let bytesPerFrame = Int(format.streamDescription.pointee.mBytesPerFrame)
-        guard bytesPerFrame > 0 else { return }
-        let frameCount = AVAudioFrameCount(data.count / bytesPerFrame)
-        guard frameCount > 0,
-              let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount) else {
-            return
-        }
+        // Incoming data is Int16 PCM (2 bytes per sample), mono.
+        let bytesPerSample = 2
+        let sampleCount = data.count / bytesPerSample
+        guard sampleCount > 0 else { return }
 
+        let frameCount = AVAudioFrameCount(sampleCount)
+        guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount) else { return }
         buffer.frameLength = frameCount
-        let audioBuffer = buffer.audioBufferList.pointee.mBuffers
-        guard let mData = audioBuffer.mData else { return }
+        guard let floatChannelData = buffer.floatChannelData else { return }
+        let channelPtr = floatChannelData[0]
 
-        data.withUnsafeBytes { rawBuffer in
-            if let baseAddress = rawBuffer.baseAddress {
-                memcpy(mData, baseAddress, min(Int(audioBuffer.mDataByteSize), data.count))
+        data.withUnsafeBytes { rawPtr in
+            guard let int16Ptr = rawPtr.baseAddress?.assumingMemoryBound(to: Int16.self) else { return }
+            for i in 0..<sampleCount {
+                channelPtr[i] = Float(int16Ptr[i]) / 32768.0
             }
         }
 
