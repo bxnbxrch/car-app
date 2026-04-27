@@ -10,13 +10,30 @@ import SwiftData
 import PhotosUI
 import Supabase
 
+private enum AppTab: Hashable {
+    case home
+    case friends
+    case convoys
+    case fuel
+}
+
 struct ContentView: View {
+    @StateObject private var convoyStore: ConvoyStore
+    @StateObject private var voiceStore: VoiceStore
     @State private var profile: UserProfileRow?
     @State private var isLoadingProfile = true
     @State private var showProfileHub = false
+    @State private var selectedTab: AppTab = .home
+    @AppStorage("pending_convoy_invite_token") private var pendingConvoyInviteToken = ""
+    @AppStorage("pending_convoy_invite_code") private var pendingConvoyInviteCode = ""
+
+    init() {
+        _convoyStore = StateObject(wrappedValue: AppServices.shared.convoyStore)
+        _voiceStore = StateObject(wrappedValue: AppServices.shared.voiceStore)
+    }
 
     var body: some View {
-        TabView {
+        TabView(selection: $selectedTab) {
             NavigationStack {
                 ZStack {
                     AppTheme.appBackground
@@ -37,6 +54,7 @@ struct ContentView: View {
             .tabItem {
                 Label("Home", systemImage: "house.fill")
             }
+            .tag(AppTab.home)
 
             FeaturePlaceholderView(
                 title: "Friends",
@@ -45,14 +63,13 @@ struct ContentView: View {
             .tabItem {
                 Label("Friends", systemImage: "person.2.fill")
             }
+            .tag(AppTab.friends)
 
-            FeaturePlaceholderView(
-                title: "Convoys",
-                subtitle: "This tab is reserved for convoy creation, joining, live sessions, and map-based trip coordination."
-            )
+            ConvoysHomeView(convoyStore: convoyStore, voiceStore: voiceStore)
             .tabItem {
                 Label("Convoys", systemImage: "car.2.fill")
             }
+            .tag(AppTab.convoys)
 
             FeaturePlaceholderView(
                 title: "Fuel",
@@ -61,9 +78,13 @@ struct ContentView: View {
             .tabItem {
                 Label("Fuel", systemImage: "fuelpump.fill")
             }
+            .tag(AppTab.fuel)
         }
         .task {
             await refreshHomeProfile()
+        }
+        .task(id: pendingInviteWorkKey) {
+            await processPendingInviteIfNeeded()
         }
         .sheet(isPresented: $showProfileHub, onDismiss: {
             Task {
@@ -72,6 +93,10 @@ struct ContentView: View {
         }) {
             ProfileHubView()
         }
+    }
+
+    private var pendingInviteWorkKey: String {
+        "\(pendingConvoyInviteToken)|\(pendingConvoyInviteCode)"
     }
 
     private var homeHeader: some View {
@@ -169,7 +194,7 @@ struct ContentView: View {
             )
             HomeFeatureCard(
                 title: "Join Convoy",
-                subtitle: "Use invite links or codes when convoy flows are added.",
+                subtitle: "Use invite links or codes to hop into an active convoy.",
                 systemImage: "rectangle.and.hand.point.up.left.fill"
             )
             HomeFeatureCard(
@@ -225,6 +250,26 @@ struct ContentView: View {
             profile = loadedProfile
             isLoadingProfile = false
         }
+    }
+
+    private func processPendingInviteIfNeeded() async {
+        let token = trimmedInviteValue(pendingConvoyInviteToken)
+        let code = trimmedInviteValue(pendingConvoyInviteCode)
+
+        guard token != nil || code != nil else { return }
+
+        await MainActor.run {
+            selectedTab = .convoys
+            pendingConvoyInviteToken = ""
+            pendingConvoyInviteCode = ""
+        }
+
+        await convoyStore.acceptInvite(token: token, code: code)
+    }
+
+    private func trimmedInviteValue(_ value: String) -> String? {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 }
 

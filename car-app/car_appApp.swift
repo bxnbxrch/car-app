@@ -17,6 +17,8 @@ struct car_appApp: App {
     @State private var hasCompletedProfile = false
     @State private var hasResolvedInitialSession = false
     @AppStorage("pending_profile_payload_json") private var pendingProfilePayloadJSON = ""
+    @AppStorage("pending_convoy_invite_token") private var pendingConvoyInviteToken = ""
+    @AppStorage("pending_convoy_invite_code") private var pendingConvoyInviteCode = ""
 
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
@@ -74,6 +76,10 @@ struct car_appApp: App {
                 }
             }
             .onOpenURL { url in
+                if handleConvoyInviteURL(url) {
+                    return
+                }
+
                 Task {
                     do {
                         _ = try await supabase.auth.session(from: url)
@@ -123,5 +129,28 @@ struct car_appApp: App {
         } catch {
             await invalidateSession()
         }
+    }
+
+    private func handleConvoyInviteURL(_ url: URL) -> Bool {
+        guard url.scheme?.lowercased() == "convoy" else {
+            return false
+        }
+
+        let host = url.host?.lowercased()
+        let path = url.path.lowercased()
+        guard host == "join" || path == "/join" else {
+            return false
+        }
+
+        guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
+            return false
+        }
+
+        let token = components.queryItems?.first(where: { $0.name == "token" })?.value?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let code = components.queryItems?.first(where: { $0.name == "code" })?.value?.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        pendingConvoyInviteToken = token ?? ""
+        pendingConvoyInviteCode = code ?? ""
+        return token?.isEmpty == false || code?.isEmpty == false
     }
 }

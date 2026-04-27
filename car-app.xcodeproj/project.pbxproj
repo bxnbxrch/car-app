@@ -17,24 +17,12 @@
 
 /* Begin PBXFileReference section */
 		B548A79D2F9CC1C900CF74EF /* car-app.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "car-app.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		B59B4FBC2F9EBF2B00E706FB /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 /* End PBXFileReference section */
-
-/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		B596BBE42F9CF79800F54D4F /* Exceptions for "car-app" folder in "car-app" target */ = {
-			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
-			membershipExceptions = (
-				Info.plist,
-			);
-			target = B548A79C2F9CC1C900CF74EF /* car-app */;
-		};
-/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		B548A79F2F9CC1C900CF74EF /* car-app */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-				B596BBE42F9CF79800F54D4F /* Exceptions for "car-app" folder in "car-app" target */,
-			);
 			path = "car-app";
 			sourceTree = "<group>";
 		};
@@ -62,6 +50,7 @@
 			children = (
 				B548A79F2F9CC1C900CF74EF /* car-app */,
 				B548A79E2F9CC1C900CF74EF /* Products */,
+				B59B4FBC2F9EBF2B00E706FB /* Info.plist */,
 			);
 			sourceTree = "<group>";
 		};
@@ -291,7 +280,11 @@
 				DEVELOPMENT_TEAM = J7BP94AZJB;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = "car-app/Info.plist";
+				INFOPLIST_FILE = "";
+				INFOPLIST_KEY_CFBundleURLTypes_0_CFBundleTypeRole = Editor;
+				INFOPLIST_KEY_CFBundleURLTypes_0_CFBundleURLName = "jh.driveout.convoy";
+				INFOPLIST_KEY_CFBundleURLTypes_0_CFBundleURLSchemes_0 = convoy;
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Voice chat requires microphone access.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -324,7 +317,11 @@
 				DEVELOPMENT_TEAM = J7BP94AZJB;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = "car-app/Info.plist";
+				INFOPLIST_FILE = "";
+				INFOPLIST_KEY_CFBundleURLTypes_0_CFBundleTypeRole = Editor;
+				INFOPLIST_KEY_CFBundleURLTypes_0_CFBundleURLName = "jh.driveout.convoy";
+				INFOPLIST_KEY_CFBundleURLTypes_0_CFBundleURLSchemes_0 = convoy;
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Voice chat requires microphone access.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
